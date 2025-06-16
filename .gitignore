@@ -1,0 +1,50 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environments
+DengeNowcastingVenv/
+env/
+venv/
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code settings
+.vscode/
+
+# macOS metadata
+.DS_Store
+
+# Test coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+
+# pytest cache
+.pytest_cache/
+
+# MyPy cache
+.mypy_cache/
+
+# Logs
+*.log
+
+# Environment variables or secrets
+.env
+*.env
+
+# Built distributions
+build/
+dist/
+*.egg-info/
+
+# Jupyter Notebook metadata
+*.nbconvert.ipynb

@@ -1,0 +1,10 @@
+training:
+  batch_size: 64
+  seed: 1234
+  device: "mps"
+
+model:
+  max_delay: 40
+  past_units: 40
+  state: 'SP'
+
