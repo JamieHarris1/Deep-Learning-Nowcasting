@@ -1,7 +1,8 @@
 training:
   batch_size: 64
-  seed: 1234
   device: "mps"
+  adam_learning_rate: 0.0003
+  patience: 30
 
 model:
   max_delay: 40
