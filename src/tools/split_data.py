@@ -1,24 +1,20 @@
 import pandas as pd
 import yaml
 from pathlib import Path
-from torch.utils.data import DataLoader
-import torch.nn as nn
 
-from tools.data_utils import *
-from tools.proportion_matrix_net import ProportionMatrixNet
-from tools.train_utils import EarlyStopper, train
+from data_utils import create_reporting_delay_matrix, create_reporting_proportion_matrix
+
 
 
 
 # Get the directory of the current script
-project_dir = Path(__file__).resolve().parents[1]
+project_dir = Path(__file__).resolve().parents[2]
 
 # Load config vars
 with open( project_dir / "config.yaml", 'r') as f:
     config = yaml.safe_load(f)
 
 MAX_DELAY = config['model']['max_delay']
-BATCH_SIZE = config['training']['batch_size']
 
 reporting_delay_data_path = create_reporting_delay_matrix(
     start_year = 2013,
@@ -58,25 +54,8 @@ train_df = propdf.iloc[MAX_DELAY: train_end_idx]
 val_df = propdf.iloc[train_end_idx - MAX_DELAY : val_end_idx]
 test_df = propdf.iloc[val_end_idx - MAX_DELAY : ]
 
-# Create PyTorch dataset objects
-train_dataset = ReportingDataset(train_df, max_delay=MAX_DELAY)
-val_dataset   = ReportingDataset(val_df,   max_delay=MAX_DELAY)
-test_dataset  = ReportingDataset(test_df,  max_delay=MAX_DELAY)
-
-# Create PyTorch Dataloaders without shuffle since want to keep temporal relationships
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
-
-# Train model 
-early_stopper = EarlyStopper(patience=config['training']['patience'], max_delay=MAX_DELAY)
-model = ProportionMatrixNet(max_delay=MAX_DELAY)
-optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['adam_learning_rate'])
-loss_fn = nn.MSELoss()
-device = torch.device(config['training']['device'])
-
-train(model, early_stopper, train_loader, val_loader, optimizer, loss_fn, device, num_epochs=20)
-
-# Load best set of weights on validation set
-model.load_state_dict(torch.load(project_dir / "src" / "outputs" / "weights" / f"weights_max_delay_{MAX_DELAY}"))
-
+# Write transformed data to csv in same folder
+model_data_path = project_dir / "data" / "model"
+train_df.to_csv(model_data_path / "training_data.csv", index=True)
+val_df.to_csv(model_data_path / "validation_data.csv", index=True)
+test_df.to_csv(model_data_path / "test_data.csv", index=True)
