@@ -25,6 +25,11 @@ BATCH_SIZE = config['training']['batch_size']
 train_df = pd.read_csv(project_dir / "data" / "model" / "training_data.csv", index_col=0)
 val_df = pd.read_csv(project_dir / "data" / "model" / "validation_data.csv", index_col=0)
 
+# Drop total counts
+train_df = train_df.drop(["y"], axis=1)
+val_df = val_df.drop(["y"], axis=1)
+
+
 # Create PyTorch dataset objects
 train_dataset = ReportingDataset(train_df, max_delay=MAX_DELAY)
 val_dataset   = ReportingDataset(val_df,   max_delay=MAX_DELAY)

@@ -34,11 +34,10 @@ reporting_delay_prop_data_path = create_reporting_proportion_matrix(
 # Read in raw data
 dengdf = pd.read_csv(reporting_delay_prop_data_path, index_col=0)
 
-# Drop total counts
-propdf = dengdf.drop(["y"], axis=1)
+
 
 # Drop last max_delay days as they are incomplete
-propdf = propdf.iloc[0: -MAX_DELAY]
+propdf = dengdf.iloc[0: -MAX_DELAY]
 
 # Split into train, val, test datasets
 train_prop, val_prop, test_prop = 0.7, 0.15, 0.15
