@@ -10,7 +10,7 @@ def create_reporting_delay_matrix(
     ): 
 
     # Get the directory of the current script
-    project_dir = Path(__file__).resolve().parents[2]
+    project_dir = Path.cwd()
 
     # Go up one level and into the data folder
     input_data_path = project_dir / "data" / "raw" / input_data_filename
@@ -66,7 +66,7 @@ def create_reporting_proportion_matrix(
     max_delay, input_data_filename, output_data_filename
 ):
     # Get the directory of the current script
-    project_dir = Path(__file__).resolve().parents[2]
+    project_dir = Path.cwd()
 
     # Go up one level and into the data folder
     input_data_path = project_dir / "data" / "transformed" / input_data_filename
