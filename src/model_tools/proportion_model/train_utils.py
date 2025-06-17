@@ -5,7 +5,7 @@ from pathlib import Path
 class EarlyStopper:
     def __init__(self, patience, max_delay):
 
-        self.project_dir = Path(__file__).resolve().parents[2]
+        self.project_dir = Path.cwd()
         self.weight_dir = self.project_dir / "src" / "outputs" / "weights"
         self.patience = patience
         self.max_delay = max_delay

@@ -5,14 +5,14 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 
-from tools.data_utils import ReportingDataset
-from tools.proportion_matrix_net import ProportionMatrixNet
-from tools.train_utils import EarlyStopper, train
+from src.data_tools.data_utils import ReportingDataset
+from src.model_tools.proportion_model.proportion_matrix_net import ProportionMatrixNet
+from src.model_tools.proportion_model.train_utils import EarlyStopper, train
 
 
 
 # Get the directory of the current script
-project_dir = Path(__file__).resolve().parents[1]
+project_dir = Path.cwd()
 
 # Load config vars
 with open( project_dir / "config.yaml", 'r') as f:

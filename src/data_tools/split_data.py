@@ -2,13 +2,13 @@ import pandas as pd
 import yaml
 from pathlib import Path
 
-from data_utils import create_reporting_delay_matrix, create_reporting_proportion_matrix
+from src.data_tools.data_utils import create_reporting_delay_matrix, create_reporting_proportion_matrix
 
 
 
 
 # Get the directory of the current script
-project_dir = Path(__file__).resolve().parents[2]
+project_dir = Path.cwd()
 
 # Load config vars
 with open( project_dir / "config.yaml", 'r') as f:
