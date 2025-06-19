@@ -74,7 +74,6 @@ def create_reporting_proportion_matrix(
     # Read in raw data
     dengdf = pd.read_csv(input_data_path, index_col=0)
 
-    # dengdf = pd.read_csv("../data/transformed/dengue-sp-reporting-delay.csv", index_col=0)
     dengdf['y'] = dengdf.sum(axis=1)
     reporting_props = dengdf.copy()
 
