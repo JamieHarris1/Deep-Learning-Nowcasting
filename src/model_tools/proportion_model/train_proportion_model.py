@@ -30,23 +30,25 @@ train_df = train_df.drop(["y"], axis=1)
 val_df = val_df.drop(["y"], axis=1)
 
 
-# Create PyTorch dataset objects
-train_dataset = ReportingDataset(train_df, max_delay=MAX_DELAY)
-val_dataset   = ReportingDataset(val_df,   max_delay=MAX_DELAY)
+print(val_df)
 
-# Create PyTorch Dataloaders without shuffle since want to keep temporal relationships
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+# # Create PyTorch dataset objects
+# train_dataset = ReportingDataset(train_df, max_delay=MAX_DELAY)
+# val_dataset   = ReportingDataset(val_df,   max_delay=MAX_DELAY)
 
-# Train model 
-early_stopper = EarlyStopper(patience=config['training']['patience'], max_delay=MAX_DELAY)
-model = ProportionMatrixNet(max_delay=MAX_DELAY)
-optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['adam_learning_rate'])
-loss_fn = nn.MSELoss()
-device = torch.device(config['training']['device'])
+# # Create PyTorch Dataloaders without shuffle since want to keep temporal relationships
+# train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
+# val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-train(model, early_stopper, train_loader, val_loader, optimizer, loss_fn, device, num_epochs=20)
+# # Train model 
+# early_stopper = EarlyStopper(patience=config['training']['patience'], max_delay=MAX_DELAY)
+# model = ProportionMatrixNet(max_delay=MAX_DELAY)
+# optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['adam_learning_rate'])
+# loss_fn = nn.MSELoss()
+# device = torch.device(config['training']['device'])
 
-# Load best set of weights on validation set
-# model.load_state_dict(torch.load(project_dir / "src" / "outputs" / "weights" / f"weights_max_delay_{MAX_DELAY}"))
+# train(model, early_stopper, train_loader, val_loader, optimizer, loss_fn, device, num_epochs=20)
+
+# # Load best set of weights on validation set
+# # model.load_state_dict(torch.load(project_dir / "src" / "outputs" / "weights" / f"weights_max_delay_{MAX_DELAY}"))
 
