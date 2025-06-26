@@ -24,15 +24,15 @@ reporting_delay_data_path = create_reporting_delay_matrix(
     output_data_filename = 'reporting_delay.csv'
 )
 
-reporting_delay_prop_data_path = create_reporting_proportion_matrix(
-    max_delay = MAX_DELAY,
-    input_data_filename = 'reporting_delay.csv',
-    output_data_filename = 'reporting_delay_proportion.csv'
-)
+# reporting_delay_prop_data_path = create_reporting_proportion_matrix(
+#     max_delay = MAX_DELAY,
+#     input_data_filename = 'reporting_delay.csv',
+#     output_data_filename = 'reporting_delay_proportion.csv'
+# )
 
 
 # Read in raw data
-dengdf = pd.read_csv(reporting_delay_prop_data_path, index_col=0)
+dengdf = pd.read_csv(reporting_delay_data_path, index_col=0)
 
 
 # Drop last max_delay days as they are incomplete
