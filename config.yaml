@@ -5,7 +5,7 @@ training:
   patience: 30
 
 model:
-  max_delay: 20
+  max_delay: 40
   past_units: 40
   state: 'SP'
 
