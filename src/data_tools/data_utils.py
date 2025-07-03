@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 
 
 def create_reporting_delay_matrix(
-    start_year, end_year, max_delay,
+    start_year, end_year, max_delay, data_folder_path,
     input_data_filename, output_data_filename
     ): 
 
@@ -13,7 +13,7 @@ def create_reporting_delay_matrix(
     project_dir = Path.cwd()
 
     # Go up one level and into the data folder
-    input_data_path = project_dir / "data" / "raw" / input_data_filename
+    input_data_path = data_folder_path / "raw" / input_data_filename
 
     # Read in raw data
     dengdf_raw = pd.read_csv(input_data_path, index_col=0)
@@ -58,7 +58,7 @@ def create_reporting_delay_matrix(
     deng_delays.columns = [deng_delays.columns[0]] + [f"delay_{col}" for col in deng_delays.columns[1:]]
 
     # Write transformed data to csv in same folder
-    output_data_path = project_dir / "data" / "transformed" / output_data_filename
+    output_data_path = data_folder_path / "transformed" / output_data_filename
     deng_delays.to_csv(output_data_path, index=False)
     return output_data_path
 
@@ -91,7 +91,37 @@ def create_reporting_proportion_matrix(
     reporting_props.to_csv(output_data_path, index=True)
     return output_data_path
     
+def create_data_split(
+        start_year, end_year, D,
+        data_folder_path, input_filename, train_prop, val_prop, test_prop):
+    reporting_delay_path = create_reporting_delay_matrix(
+        start_year, end_year, D, data_folder_path, input_filename, "reporting_delay.csv"
+    )
+    reporting_dealy_df = pd.read_csv(reporting_delay_path, index_col=0)
 
+    # Drop last D days as they are incomplete
+    complete_df = reporting_dealy_df.iloc[0: -D]
+
+    # First max_delay days are not usable
+    n_usable_obs = len(complete_df) - D
+
+    # Split the number of usable obs over the 3 datasets
+    train_end_idx = D + int(train_prop*n_usable_obs)
+    val_end_idx = train_end_idx + int(val_prop*n_usable_obs)
+
+    train_df = complete_df.iloc[D: train_end_idx]
+    val_df = complete_df.iloc[train_end_idx - D : val_end_idx]
+    test_df = complete_df.iloc[val_end_idx - D : ]
+
+    # Write transformed data to csv in same folder
+    # Get the directory of the current script
+    model_data_path = data_folder_path / "model"
+    train_df.to_csv(model_data_path / "training_data.csv", index=True)
+    val_df.to_csv(model_data_path / "validation_data.csv", index=True)
+    test_df.to_csv(model_data_path / "test_data.csv", index=True)
+    complete_df.to_csv(model_data_path / "complete_data.csv", index=True)
+    return None
+    
 
 class ReportingDataset(Dataset):
     def __init__(self, data, max_delay):
