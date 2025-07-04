@@ -100,16 +100,16 @@ def create_data_split(
     reporting_dealy_df = pd.read_csv(reporting_delay_path, index_col=0)
 
     # Drop last D days as they are incomplete
-    complete_df = reporting_dealy_df.iloc[0: -D]
+    complete_df = reporting_dealy_df.iloc[D-1: -D+1]
 
     # First max_delay days are not usable
-    n_usable_obs = len(complete_df) - D
+    n_usable_obs = len(complete_df)
 
     # Split the number of usable obs over the 3 datasets
     train_end_idx = D + int(train_prop*n_usable_obs)
     val_end_idx = train_end_idx + int(val_prop*n_usable_obs)
 
-    train_df = complete_df.iloc[D: train_end_idx]
+    train_df = complete_df.iloc[0: train_end_idx]
     val_df = complete_df.iloc[train_end_idx - D : val_end_idx]
     test_df = complete_df.iloc[val_end_idx - D : ]
 
@@ -124,34 +124,45 @@ def create_data_split(
     
 
 class ReportingDataset(Dataset):
-    def __init__(self, data, max_delay):
+    def __init__(self, data, D, M, max_val, device='mps'):
         self.df = data.copy()
-        self.max_delay = max_delay
+        self.D = D
+        self.M = M
+        self.device = device
+        self.max_val = max_val
         
     def __len__(self):
-        return len(self.df) - self.max_delay
+        return len(self.df) - self.D - self.M
     
     def __getitem__(self, idx):
-        # Ignore first max_delay days to ensure full matrix
-        t = idx + self.max_delay
+        # Ignore first D days to ensure full matrix
+        t = idx + self.D + self.M
 
-        # Create label
-        prop_matrix = self.df.iloc[t - self.max_delay : t].copy()
-        prop_matrix_np = prop_matrix.values
+        # Create reporting triangle for day t
+        matrix = self.df.iloc[t - self.D - self.M: t, :self.D].copy().values
+        
 
-        # Mask lower right triangle of matrix with zeros, in line with what is observable at time t
-        prop_masked = self.mask_delay_prop_matrix(prop_matrix_np.copy())
+        # Mask last D days
+        matrix[-self.D:] = self.mask_delay_prop_matrix(matrix[-self.D:])
 
-        # Return in tensor format
-        return (
-            torch.tensor(prop_masked, dtype=torch.float32),
-            torch.tensor(prop_matrix_np, dtype=torch.float32)
-        )
+        # Create y label
+        y = self.df.iloc[t].sum()
 
-    def mask_delay_prop_matrix(self, delay_prop_matrix):
-        for i in range(self.max_delay):
-            for j in range(self.max_delay):
-                if i + j > self.max_delay - 1:
-                    delay_prop_matrix[i, j] = 0
-        return delay_prop_matrix
+        # Convert to tensors
+        matrix = torch.tensor(matrix, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+
+        # Put tensors on device
+        matrix.to(device=self.device)
+        y.to(device=self.device)
+
+        # Return in matrix, y in tensor format
+        return (matrix / self.max_val, y)
+
+    def mask_delay_prop_matrix(self, matrix):
+        for i in range(self.D):
+            for j in range(self.D):
+                if i + j > self.D - 1:
+                    matrix[i, j] = 0
+        return matrix
 
