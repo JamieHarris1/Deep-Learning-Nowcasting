@@ -314,21 +314,21 @@ class PropPNN(nn.Module):
         x_prop = self.act(self.fc_prop1(x_prop))
         x_prop = self.drop2(x_prop)
         x_prop = self.act(self.fc_prop2(x_prop))
-        x_prop = self.drop2(x_prop)
         x_prop = self.act(self.fc_prop3(x_prop))
+        x_prop = self.drop2(x_prop)
         x_prop = self.act(self.fc_prop4(x_prop))
 
-        # temperature = self.softplus(self.temperature_raw)
-        temp_low = 0.8
-        temp_high = 1.2
+        temperature = self.softplus(self.temperature_raw)
+        # temp_low = 0.5
+        # temp_high = 1
 
-        x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
+        # x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
 
-        # Learn a value in [0, 1]
-        gate = torch.sigmoid(self.fc_temp2(x_temp))
+        # # Learn a value in [0, 1]
+        # gate = torch.sigmoid(self.fc_temp2(x_temp))
 
-        # Interpolate between low vs high temp
-        temperature = gate * temp_low + (1 - gate) * temp_high
+        # # Interpolate between low vs high temp
+        # temperature = gate * temp_low + (1 - gate) * temp_high
 
         scaled_logits = x_prop.squeeze(-1) / temperature
         p = torch.softmax(scaled_logits, dim=-1) 
