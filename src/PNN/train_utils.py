@@ -72,7 +72,7 @@ def process_preds_observed(dist_pred, num_obs):
 
 
 
-def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct = "nll", device = torch.device("mps"), dow = False, num_obs = False):
+def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct = "nll", device = torch.device("mps"), dow = False, num_obs = False, label_type='y', alpha=1):
     model.to(device)
     model.float()
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.0003, weight_decay=1e-3)
@@ -90,6 +90,8 @@ def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct =
             else:
                 dist_pred = model(mat.to(device))
             loss = get_loss(y.to(device), dist_pred, loss_fct=loss_fct).mean()
+            if label_type == "z":
+                loss += alpha * torch.nn.functional.mse_loss(dist_pred.mean.sum(-1), y.to(device).sum(-1).detach())
             loss.retain_grad()
             loss.backward()
             #nn.utils.clip_grad_value_(model.parameters(), 10.0)
@@ -125,6 +127,9 @@ def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct =
                 else:
                     test_pred = model(mat.to(device))
                 test_loss = get_loss(y.to(device), test_pred, loss_fct=loss_fct).mean()
+                if label_type == "z":
+                    test_loss += alpha * torch.nn.functional.mse_loss(test_pred.mean.sum(-1), y.to(device).sum(-1).detach())
+            
                 test_batch_loss += test_loss.item()
             #test_batch_loss /= len(test_loader)
             if early_stopper.early_stop(test_batch_loss, model):

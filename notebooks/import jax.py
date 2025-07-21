@@ -1,2 +1,4 @@
-import jaxlib
-print(jaxlib.__file__)
+import datetime
+d = datetime.date(2025, 7, 19)
+
+print(d.weekday())
