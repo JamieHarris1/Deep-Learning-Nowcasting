@@ -207,7 +207,7 @@ count_parameters(npnn) """
 
 class PropPNN(nn.Module):
     
-    def __init__(self, past_units = 40, max_delay = 40, hidden_units = [16, 8], conv_channels = [16, 1], embedding_dim = 10, dropout_probs = [0.15, 0.1], device="cpu"):
+    def __init__(self, max_val, past_units = 40, max_delay = 40, hidden_units = [16, 8], conv_channels = [16, 1], embedding_dim = 10, dropout_probs = [0.15, 0.1], device="cpu"):
         super().__init__()
         self.temperature_raw = nn.Parameter(torch.tensor(1.0))
         self.device = device
@@ -221,6 +221,7 @@ class PropPNN(nn.Module):
         #self.fc5 = nn.Linear(hidden_units[1], hidden_units[2])
         self.fcnb = nn.Linear(hidden_units[-1], 2)
         self.const = 10000 # if not normalized, take constant out
+        self.max_val = max_val
         self.embedding_dim = embedding_dim
         self.embed = nn.Embedding(7, embedding_dim)
         #self.embed.weight.requires_grad_(False)
@@ -247,6 +248,7 @@ class PropPNN(nn.Module):
         self.fc_prop3 = nn.Linear(hidden_units[1], hidden_units[1])
         self.fc_prop4 = nn.Linear(hidden_units[1], 1)
         self.drop1 = nn.Dropout(0.1)
+        self.bnorm_prop = nn.BatchNorm1d(num_features=hidden_units[1])
 
         self.norm1 = nn.LayerNorm(self.past_units)
         self.drop_prop = nn.Dropout(0.1)
@@ -302,8 +304,8 @@ class PropPNN(nn.Module):
         #x = self.act(self.fc5(self.bnorm7(x)))
         x = self.fcnb(self.bnorm_final(x))
 
-        lbda = self.const*self.softplus(x[:, 0])
-        phi = (self.const**2)*self.softplus(x[:, 1])+1e-5
+        lbda = self.max_val * self.softplus(x[:, 0])
+        phi = (self.max_val**2) * self.softplus(x[:, 1])+1e-5
 
         lbda = lbda.unsqueeze(-1)                             
         phi = phi.unsqueeze(-1)
@@ -312,29 +314,28 @@ class PropPNN(nn.Module):
         #MLP layers
         x_prop = rep_tri.float()
         x_prop = self.act(self.fc_prop1(x_prop))
-        x_prop = self.drop2(x_prop)
         x_prop = self.act(self.fc_prop2(x_prop))
         x_prop = self.act(self.fc_prop3(x_prop))
-        x_prop = self.drop2(x_prop)
+        x_prop = self.drop_prop(x_prop)
         x_prop = self.act(self.fc_prop4(x_prop))
 
-        temperature = self.softplus(self.temperature_raw)
-        # temp_low = 0.5
-        # temp_high = 1
+        # temperature = self.softplus(self.temperature_raw)
+        temp_low = 0.7
+        temp_high = 1.3
 
-        # x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
+        x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
 
-        # # Learn a value in [0, 1]
-        # gate = torch.sigmoid(self.fc_temp2(x_temp))
+        # Learn a value in [0, 1]
+        gate = torch.sigmoid(self.fc_temp2(x_temp))
 
-        # # Interpolate between low vs high temp
-        # temperature = gate * temp_low + (1 - gate) * temp_high
+        # Interpolate between low vs high temp
+        temperature = gate * temp_low + (1 - gate) * temp_high
 
         scaled_logits = x_prop.squeeze(-1) / temperature
         p = torch.softmax(scaled_logits, dim=-1) 
           
                                 
-        mu = p * lbda   
+        mu = p * lbda 
         dist = NB(lbda=mu, phi=phi) 
 
         return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1)
