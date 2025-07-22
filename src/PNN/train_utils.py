@@ -72,7 +72,7 @@ def process_preds_observed(dist_pred, num_obs):
 
 
 
-def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct = "nll", device = torch.device("mps"), dow = False, num_obs = False, label_type='y', alpha=1):
+def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct = "nll", device = torch.device("mps"), dow = False, num_obs = False, label_type='y', alpha=0):
     model.to(device)
     model.float()
     optimizer = torch.optim.Adam(model.parameters(), lr = 0.0003, weight_decay=1e-3)
