@@ -367,8 +367,6 @@ class PropNet(nn.Module):
         self.fc_count2 = nn.Linear(self.M, hidden_units[0])
         self.fc_count3 = nn.Linear(hidden_units[0], hidden_units[1])
         self.fc_count4 = nn.Linear(hidden_units[1], 2)
-        self.head_lambda = nn.Linear(1, 1)  # For λ
-        self.head_phi = nn.Linear(1, 1)
         
         self.embed_day = nn.Embedding(7, embedding_dim)
         self.embed_week = nn.Embedding(53, embedding_dim)
@@ -396,6 +394,9 @@ class PropNet(nn.Module):
 
         self.drop_prop1 = nn.Dropout(dropout_probs[0])
         self.drop_prop2 = nn.Dropout(dropout_probs[1])
+
+        self.fc_temp1 = nn.Linear(1, 8)
+        self.fc_temp2 = nn.Linear(8, 1)
 
 
     def forward(self, rep_tri, dow): 
@@ -452,10 +453,20 @@ class PropNet(nn.Module):
         x_prop = self.act(self.fc_prop4(x_prop))
 
         ## Temperature ##
-        temperature = self.softplus(self.temperature_raw)
+        # temperature = self.softplus(self.temperature_raw)
+        temp_low = 0.4
+        temp_high = 1.3
+
+        x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
+
+        # Learn a value in [0, 1]
+        gate = torch.sigmoid(self.fc_temp2(x_temp))
+
+        # Interpolate between low vs high temp
+        temperature = gate * temp_low + (1 - gate) * temp_high
 
         # Learn sharpness of proportion dist with temp
-        temperature = self.softplus(self.temperature_raw)
+        # temperature = self.softplus(self.temperature_raw)
         scaled_logits = x_prop.squeeze(-1) / temperature 
         
         ## Final Distribution params, shape: (B,D) ##
