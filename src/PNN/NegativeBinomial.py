@@ -117,6 +117,7 @@ class ZINegBin(ExponentialFamily):
 
     def __init__(self, lbda, phi, pi, validate_args=None):
         self.lbda, self.phi, self.pi = broadcast_all(lbda, phi, pi)
+        self.lbda = torch.clamp(self.lbda, min=1e-6)
         if isinstance(lbda, Number):
             batch_shape = torch.Size()
         else:
@@ -153,6 +154,7 @@ class ZINegBin(ExponentialFamily):
             self._validate_sample(y)
         y = torch.squeeze(y)
         lbda, phi, pi = self.lbda, self.phi, self.pi
+        
 
         # NB log-prob
         nb_log_prob = (

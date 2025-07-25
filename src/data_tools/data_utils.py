@@ -2,6 +2,7 @@ import pandas as pd
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
+import os
 
 
 def create_reporting_delay_matrix(
@@ -9,22 +10,21 @@ def create_reporting_delay_matrix(
     input_data_filename, output_data_filename
     ): 
 
-    # Get the directory of the current script
-    project_dir = Path.cwd()
+    
 
-    # Go up one level and into the data folder
-    input_data_path = data_folder_path / "raw" / input_data_filename
+    project_dir = project_dir = Path.cwd().parent
 
-    # Read in raw data
-    dengdf_raw = pd.read_csv(input_data_path, index_col=0)
+    base_folder_path = project_dir / "data" / "raw" / "counts"
+    files = [f for f in os.listdir(base_folder_path) if f.endswith('.csv')]
+
+    df_list = [pd.read_csv(os.path.join(base_folder_path, file)) for file in files]
+    dengdf_raw = pd.concat(df_list, ignore_index=True)
+
     
     # Filter for date of symptom onset and the reporting date
     dengdf = dengdf_raw[['DT_SIN_PRI', 'DT_NOTIFIC']].dropna()
     dengdf.columns = ['Date_Symptoms', 'Date_Reported']
-    dengdf = dengdf.apply(pd.to_datetime).sort_values(by='Date_Symptoms')
-
-    # Compute delay and convert to integer rather than Timedelta object
-    dengdf['Delay'] = (dengdf['Date_Reported'] - dengdf['Date_Symptoms']).dt.days
+    dengdf = dengdf.apply(pd.to_datetime, errors='coerce')
 
     # Filter between start and end year
     dengdf = dengdf[
@@ -33,6 +33,13 @@ def create_reporting_delay_matrix(
     (dengdf["Date_Reported"].dt.year >= start_year) &
     (dengdf["Date_Reported"].dt.year <= end_year)
     ]
+    
+    dengdf = dengdf.sort_values(by='Date_Symptoms')
+
+    # Compute delay and convert to integer rather than Timedelta object
+    dengdf['Delay'] = (dengdf['Date_Reported'] - dengdf['Date_Symptoms']).dt.days
+
+    
 
     # Filter out rows with delays greater than max_delay
     dengdf = dengdf[
@@ -97,6 +104,7 @@ def create_data_split(
     reporting_delay_path = create_reporting_delay_matrix(
         start_year, end_year, D, data_folder_path, input_filename, "reporting_delay.csv"
     )
+    
     reporting_dealy_df = pd.read_csv(reporting_delay_path, index_col=0)
 
     # Drop last D days as they are incomplete

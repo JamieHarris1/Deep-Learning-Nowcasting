@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+from sparsemax import Sparsemax
 from PNN.NegativeBinomial import NegBin as NB
 from PNN.NegativeBinomial import ZINegBin as ZINB
 
@@ -472,7 +473,205 @@ class PropNet(nn.Module):
         ## Final Distribution params, shape: (B,D) ##
         p = torch.softmax(scaled_logits, dim=-1)
         mu = p * lbda 
+        
 
         dist = NB(lbda=mu, phi=phi)
 
         return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1)
+
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, dim, dropout=0.1):
+        super().__init__()
+        self.fc1 = nn.Linear(dim, dim)
+        self.bn1 = nn.BatchNorm1d(dim)
+        self.act = nn.SiLU()
+        self.drop = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(dim, dim)
+        self.bn2 = nn.BatchNorm1d(dim)
+    
+    def forward(self, x):
+        # x shape: (B, L, dim)
+        B, L, D = x.shape
+        out = self.fc1(x.view(B*L, D))
+        out = self.bn1(out)
+        out = self.act(out)
+        out = self.drop(out)
+        out = self.fc2(out)
+        out = self.bn2(out)
+        out = out.view(B, L, D)
+        return self.act(out + x)
+    
+class TypePNN(nn.Module):
+    def __init__(self, max_val, D, M, D_g, n_type_name, device="cpu", embedding_dim=10, conv_channels=[16, 1], hidden_units=[16, 8], dropout_probs=[0.3, 0.1]):
+        super().__init__()
+        self.max_val = max_val
+        self.D = D
+        self.M = M
+        self.D_type = D_g
+        self.n_type_name = n_type_name
+        self.device = device
+
+        self.softplus = nn.Softplus()
+        self.act = nn.SiLU()
+        self.sparsemax = Sparsemax(dim=1)
+        self.sigmoid = nn.Sigmoid()
+        self.temperature_raw = nn.Parameter(torch.tensor(1.0))
+        self.lbda_scale = nn.Parameter(torch.tensor(self.max_val, dtype=torch.float32))
+        self.phi_scale = nn.Parameter(torch.tensor(self.max_val**2, dtype=torch.float32))
+
+        ## Total count model ##
+
+        self.attn_count1 = nn.MultiheadAttention(embed_dim=self.D, num_heads=1, batch_first=True)
+        
+        self.conv_count1 = nn.Conv1d(self.D, conv_channels[0], kernel_size=7, padding="same")
+        self.conv_count2 = nn.Conv1d(conv_channels[0], conv_channels[1], kernel_size=7, padding="same")
+        
+        self.fc_count1 = nn.Linear(self.M, self.M)
+        self.fc_count2 = nn.Linear(self.M, hidden_units[0])
+        self.fc_count3 = nn.Linear(hidden_units[0], hidden_units[1])
+        self.fc_count4 = nn.Linear(hidden_units[1], 2)
+        
+        self.embed_day = nn.Embedding(7, embedding_dim)
+        self.embed_week = nn.Embedding(53, embedding_dim)
+        self.fc_embed_day1 = nn.Linear(embedding_dim, 2*embedding_dim)
+        self.fc_embed_day2 = nn.Linear(2*embedding_dim, self.M)
+        self.bnorm_week = nn.BatchNorm1d(num_features=2*embedding_dim)
+        
+        self.drop_count1 = nn.Dropout(dropout_probs[0])
+        self.drop_count2 = nn.Dropout(dropout_probs[1])
+
+        self.bnorm_count1 = nn.BatchNorm1d(num_features=self.D)
+        self.bnorm_count2 = nn.BatchNorm1d(num_features=conv_channels[0])
+        self.bnorm_count3 = nn.BatchNorm1d(num_features=2*embedding_dim)
+        self.bnorm_count4 = nn.BatchNorm1d(num_features=2*embedding_dim)
+        self.bnorm_count5 = nn.BatchNorm1d(num_features=self.M)
+        self.bnorm_count6 = nn.BatchNorm1d(num_features=hidden_units[0])
+        self.bnorm_count7 = nn.BatchNorm1d(num_features=hidden_units[1])
+
+        ## Proportion model ##
+
+        self.attn_prop1 = nn.MultiheadAttention(embed_dim=self.D_type, num_heads=1, batch_first=True)
+
+        self.conv_prop1 = nn.Conv2d(in_channels=self.D_type, out_channels=16, kernel_size=(3, 3), padding=1)
+        self.conv_prop2 = nn.Conv2d(in_channels=16, out_channels=self.D_type, kernel_size=(3, 3), padding=1)
+
+        self.bnorm_conv1 = nn.BatchNorm2d(num_features=self.D_type)
+        self.bnorm_conv2 = nn.BatchNorm2d(num_features=32)
+
+        self.bnorm_prop1 = nn.BatchNorm1d(num_features=self.n_type_name)
+        self.bnorm_prop2 = nn.BatchNorm1d(num_features=self.n_type_name)
+        self.bnorm_prop3 = nn.BatchNorm1d(num_features=self.n_type_name)
+
+        self.fc_prop_attn = nn.Linear(self.D_type, self.D_type)
+        self.fc_prop1 = nn.Linear(self.D_type**2, 32)
+        self.fc_prop2 = nn.Linear(32, 8)
+        self.fc_prop3 = nn.Linear(8, 1)
+        self.fc_phi_head = nn.Linear(1, self.n_type_name)
+
+        self.drop_prop1 = nn.Dropout(dropout_probs[0])
+        self.drop_prop2 = nn.Dropout(dropout_probs[1])
+
+
+    def forward(self, rep_tri, dow,  type_name_tri): 
+        x = rep_tri.float()
+
+        B, M, D = x.shape
+        B, n_type_name, T, D_type = type_name_tri.shape
+
+        ## Predict total count ##
+
+        # Attention block
+        x_add = x.clone()
+        x = self.attn_count1(x, x, x, need_weights = False)[0]
+        x = self.act(self.fc_count1(x.permute(0,2,1)))
+        x = x.permute(0,2,1) + x_add
+        x = x.permute(0, 2, 1)
+        
+        x = self.act(self.conv_count1(self.bnorm_count1(x)))
+        x = self.act(self.conv_count2(self.bnorm_count2(x)))
+        x = torch.squeeze(x, 1)
+
+        # Day of the week effect
+        if len(dow.size()) == 0:
+            dow = torch.unsqueeze(dow, 0)
+        embedded_day = self.embed_day(dow)
+        e_day = self.act(self.fc_embed_day2(self.bnorm_count3(self.act(self.fc_embed_day1(embedded_day)))))
+
+        x = x + e_day
+
+        # Final dense layers
+        
+        x = self.drop_count1(x)
+        x = self.act(self.fc_count2(self.bnorm_count5(x)))
+        x = self.drop_count2(x)
+        x = self.act(self.fc_count3(self.bnorm_count6(x)))
+        x = self.fc_count4(self.bnorm_count7(x))
+
+        phi_raw = self.fc_phi_head(self.act(x[:, 1].unsqueeze(1)))
+        
+        # Predict NB params
+        lbda = self.lbda_scale * self.softplus(x[:, 0]) + 1e-5
+        phi = self.phi_scale * self.softplus(phi_raw) + 1e-5
+
+        lbda = lbda.unsqueeze(-1)                             
+                       
+
+        ## Predict delay proportions ##
+        #(B, n_type_name, T, D_g )
+        x_prop = type_name_tri.float()
+        B, n_type,T, D_type = x_prop.shape
+        x_prop = x_prop.permute(0,1, 3, 2)
+        x_prop = x_prop.reshape(B * n_type, D_type, T)
+        
+        # Attend over delays with T embedding dim
+        x_prop_add = x_prop.clone()
+        x_prop = self.attn_prop1(x_prop, x_prop, x_prop, need_weights = False)[0]
+        x = self.act(self.fc_prop_attn(x_prop.permute(0,2,1)))
+        x_prop = x_prop.permute(0,2,1) + x_prop_add
+
+        x_prop = x_prop.reshape(B, n_type, D_type, T)
+
+
+        ## Convs over delays
+        x_prop = x_prop.permute(0,2,3,1)
+        #(B, D_g, T, n_type_name)  
+        x_prop_res = x_prop.clone()
+        x_prop = self.act(self.conv_prop1(x_prop))                   
+        x_prop = self.act(self.conv_prop2(x_prop))  
+        x_prop = x_prop + x_prop_res     
+        x_prop = x_prop.permute(0, 3, 1, 2)
+
+
+        x_prop = x_prop.reshape(B, n_type, T*D_type)
+        # (B, n_type_name, T)
+        x_prop = self.act(self.fc_prop1(self.bnorm_prop1(x_prop)))
+        x_prop = self.drop_prop1(x_prop)
+
+        x_prop = self.act(self.fc_prop2(self.bnorm_prop2(x_prop)))
+        x_prop = self.drop_prop2(x_prop)
+        x_prop = self.act(self.fc_prop3(self.bnorm_prop3(x_prop)))
+
+        x_prop = x_prop.squeeze(-1) # (B, n_type_name)
+
+
+        ## Temperature ##
+        temperature = self.softplus(self.temperature_raw)
+        scaled_logits = x_prop / 0.2
+        
+        ## Final Distribution params, shape: (B,D) ##
+        p = self.sparsemax(scaled_logits)
+        mu = p * lbda
+
+        active_type_names = p > 0.0
+
+        mu_active = mu[active_type_names]
+        phi_active = phi[active_type_names]
+        p_active = p[active_type_names]
+
+        
+
+        dist = NB(lbda=mu_active, phi=phi_active)
+
+        return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1), p_active, active_type_names

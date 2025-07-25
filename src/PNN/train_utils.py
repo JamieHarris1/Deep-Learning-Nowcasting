@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 
 class Sampler(object):
     r"""Base class for all Samplers.
@@ -90,8 +91,6 @@ def train(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct =
             else:
                 dist_pred = model(mat.to(device))
             loss = get_loss(y.to(device), dist_pred, loss_fct=loss_fct).mean()
-            if label_type == "z":
-                loss += alpha * torch.nn.functional.mse_loss(dist_pred.mean.sum(-1), y.to(device).sum(-1).detach())
             loss.retain_grad()
             loss.backward()
             #nn.utils.clip_grad_value_(model.parameters(), 10.0)
@@ -182,3 +181,64 @@ class EarlyStopper:
     
     def reset(self):
         self.counter = 0
+
+
+
+
+
+
+def train_type_name(model, num_epochs, train_loader, val_loader, early_stopper, loss_fct = "nll", device = torch.device("mps"), dow = False, num_obs = False, label_type='y', alpha=0):
+    model.to(device)
+    model.float()
+    optimizer = torch.optim.Adam(model.parameters(), lr = 0.0003, weight_decay=1e-3)
+    early_stopper.reset() # set counter to zero if same instance used for multiple training runs
+    for e in range(num_epochs):
+        batch_loss = 0.
+        model.train()
+        for (rep_tri, dow, type_name_tri), (y, p_true) in train_loader:
+            optimizer.zero_grad()
+            dist_pred, p_pred, active_type_names = model(rep_tri, dow, type_name_tri)
+
+            ll_loss = get_loss(y.to(device)[active_type_names], dist_pred, loss_fct=loss_fct).mean()
+            # kl_loss = F.kl_div(p_pred.log(), p_true[active_type_names], reduction='batchmean')
+            loss = ll_loss
+            loss.retain_grad() 
+            loss.backward()
+            #nn.utils.clip_grad_value_(model.parameters(), 10.0)
+
+            ## Check for inf or nan gradients - stop updates in that case
+            valid_gradients = True
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    # valid_gradients = not (torch.isnan(param.grad).any() or torch.isinf(param.grad).any())
+                    #print(f"{name} - Gradient NaNs: {torch.isnan(param.grad).any()} - Max Gradient: {param.grad.abs().max()}")
+                    valid_gradients = not (torch.isnan(param.grad).any())
+                    if not valid_gradients:
+                        break
+            if not valid_gradients:
+                print("Detected inf or nan values in gradients. Not updating model parameters.")
+                optimizer.zero_grad()
+        
+            optimizer.step()
+            batch_loss += loss.item()
+        
+        batch_loss /= len(train_loader)
+        with torch.no_grad(): # performance on test/validation set
+            model.eval()
+            test_batch_loss = 0.
+            for (rep_tri, dow, type_name_tri), (y, p_true) in val_loader:
+                test_dist_pred, test_p_pred, test_active_type_names = model(rep_tri.to(device), dow.to(device), type_name_tri.to(device))
+                test_ll_loss = get_loss(y.to(device)[test_active_type_names], test_dist_pred, loss_fct=loss_fct).mean()
+  
+                # test_kl_loss = F.kl_div(test_p_pred.log(), p_true[test_active_type_names], reduction='batchmean')
+                test_loss = test_ll_loss
+
+                test_batch_loss += test_loss.item()
+            #test_batch_loss /= len(test_loader)
+            if early_stopper.early_stop(test_batch_loss, model):
+                model.train() # set back to train for sampling
+                break
+        model.train()
+        #if e % 50 == 0 or e == num_epochs-1:
+        print(f"Epoch {e+1} - Train loss: {batch_loss:.3} - Val loss: {test_batch_loss:.3} - ES count: {early_stopper.get_count()}")
+    
