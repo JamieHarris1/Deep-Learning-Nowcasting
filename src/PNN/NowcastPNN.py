@@ -502,20 +502,23 @@ class ResidualBlock(nn.Module):
         out = self.bn2(out)
         out = out.view(B, L, D)
         return self.act(out + x)
-    
+ 
+
 class TypePNN(nn.Module):
-    def __init__(self, max_val, D, M, D_g, n_type_name, device="cpu", embedding_dim=10, conv_channels=[16, 1], hidden_units=[16, 8], dropout_probs=[0.3, 0.1]):
+    def __init__(self, max_val, D, M, T, D_t, n_type_name, device="cpu", embedding_dim=10, conv_channels=[16, 1], hidden_units=[16, 8], dropout_probs=[0.3, 0.1]):
         super().__init__()
         self.max_val = max_val
         self.D = D
         self.M = M
-        self.D_type = D_g
+        self.T = T
+        self.D_t = D_t
         self.n_type_name = n_type_name
         self.device = device
 
         self.softplus = nn.Softplus()
         self.act = nn.SiLU()
         self.sparsemax = Sparsemax(dim=1)
+        self.softmax = torch.nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
         self.temperature_raw = nn.Parameter(torch.tensor(1.0))
         self.lbda_scale = nn.Parameter(torch.tensor(self.max_val, dtype=torch.float32))
@@ -551,27 +554,18 @@ class TypePNN(nn.Module):
         self.bnorm_count7 = nn.BatchNorm1d(num_features=hidden_units[1])
 
         ## Proportion model ##
-
-        self.attn_prop1 = nn.MultiheadAttention(embed_dim=self.D_type, num_heads=1, batch_first=True)
-
-        self.conv_prop1 = nn.Conv2d(in_channels=self.D_type, out_channels=16, kernel_size=(3, 3), padding=1)
-        self.conv_prop2 = nn.Conv2d(in_channels=16, out_channels=self.D_type, kernel_size=(3, 3), padding=1)
-
-        self.bnorm_conv1 = nn.BatchNorm2d(num_features=self.D_type)
-        self.bnorm_conv2 = nn.BatchNorm2d(num_features=32)
-
-        self.bnorm_prop1 = nn.BatchNorm1d(num_features=self.n_type_name)
-        self.bnorm_prop2 = nn.BatchNorm1d(num_features=self.n_type_name)
-        self.bnorm_prop3 = nn.BatchNorm1d(num_features=self.n_type_name)
-
-        self.fc_prop_attn = nn.Linear(self.D_type, self.D_type)
-        self.fc_prop1 = nn.Linear(self.D_type**2, 32)
-        self.fc_prop2 = nn.Linear(32, 8)
-        self.fc_prop3 = nn.Linear(8, 1)
         self.fc_phi_head = nn.Linear(1, self.n_type_name)
+        self.fc_shared = nn.Linear(self.M, self.n_type_name)
 
-        self.drop_prop1 = nn.Dropout(dropout_probs[0])
-        self.drop_prop2 = nn.Dropout(dropout_probs[1])
+        conv_out_channels = 16
+        fc_hidden = 16
+        self.conv_prop1 = nn.Conv1d(self.D_t, conv_out_channels, kernel_size=3, padding=1)
+        self.conv_prop2 = nn.Conv1d(conv_out_channels, 1, kernel_size=3, padding=1)
+
+        # Fully connected layers for final proportion prediction
+        self.fc_prop1 = nn.Linear(self.T, fc_hidden)
+        self.drop_prop1 = nn.Dropout(p=0.1)
+        self.fc_prop2 = nn.Linear(fc_hidden, 1)
 
 
     def forward(self, rep_tri, dow,  type_name_tri): 
@@ -600,6 +594,7 @@ class TypePNN(nn.Module):
         e_day = self.act(self.fc_embed_day2(self.bnorm_count3(self.act(self.fc_embed_day1(embedded_day)))))
 
         x = x + e_day
+        x_shared = x.clone()
 
         # Final dense layers
         
@@ -621,47 +616,37 @@ class TypePNN(nn.Module):
         ## Predict delay proportions ##
         #(B, n_type_name, T, D_g )
         x_prop = type_name_tri.float()
-        B, n_type,T, D_type = x_prop.shape
-        x_prop = x_prop.permute(0,1, 3, 2)
-        x_prop = x_prop.reshape(B * n_type, D_type, T)
+        B, N, T, D = x_prop.shape
+
         
-        # Attend over delays with T embedding dim
-        x_prop_add = x_prop.clone()
-        x_prop = self.attn_prop1(x_prop, x_prop, x_prop, need_weights = False)[0]
-        x = self.act(self.fc_prop_attn(x_prop.permute(0,2,1)))
-        x_prop = x_prop.permute(0,2,1) + x_prop_add
+        
+        x_prop = x_prop.permute(0, 1, 3, 2).reshape(B * N, D, T)
 
-        x_prop = x_prop.reshape(B, n_type, D_type, T)
-
-
-        ## Convs over delays
-        x_prop = x_prop.permute(0,2,3,1)
-        #(B, D_g, T, n_type_name)  
-        x_prop_res = x_prop.clone()
-        x_prop = self.act(self.conv_prop1(x_prop))                   
-        x_prop = self.act(self.conv_prop2(x_prop))  
-        x_prop = x_prop + x_prop_res     
-        x_prop = x_prop.permute(0, 3, 1, 2)
+        x_prop = self.act(self.conv_prop1(x_prop))
+        x_prop = self.act(self.conv_prop2(x_prop))
+        x_prop = x_prop.squeeze(1)
+        # (B*N, T)
 
 
-        x_prop = x_prop.reshape(B, n_type, T*D_type)
-        # (B, n_type_name, T)
-        x_prop = self.act(self.fc_prop1(self.bnorm_prop1(x_prop)))
+        x_shared = self.act(self.fc_shared(x_shared))
+        x_shared = x_shared.reshape(B*self.n_type_name, 1)
+
+        x_prop = x_prop + x_shared
+
+        # Fully connected head
+        x_prop = self.act(self.fc_prop1(x_prop))  # (B*N, hidden)
         x_prop = self.drop_prop1(x_prop)
-
-        x_prop = self.act(self.fc_prop2(self.bnorm_prop2(x_prop)))
-        x_prop = self.drop_prop2(x_prop)
-        x_prop = self.act(self.fc_prop3(self.bnorm_prop3(x_prop)))
-
-        x_prop = x_prop.squeeze(-1) # (B, n_type_name)
+        x_prop = self.fc_prop2(x_prop)            # (B*N, 1)
+        x_prop = x_prop.view(B, N)                # (B, n_type_name)
 
 
         ## Temperature ##
         temperature = self.softplus(self.temperature_raw)
-        scaled_logits = x_prop / 0.2
+        scaled_logits = x_prop / temperature
         
         ## Final Distribution params, shape: (B,D) ##
-        p = self.sparsemax(scaled_logits)
+        # p = self.sparsemax(scaled_logits)
+        p = self.softmax(scaled_logits)
         mu = p * lbda
 
         active_type_names = p > 0.0
@@ -670,7 +655,6 @@ class TypePNN(nn.Module):
         phi_active = phi[active_type_names]
         p_active = p[active_type_names]
 
-        
 
         dist = NB(lbda=mu_active, phi=phi_active)
 

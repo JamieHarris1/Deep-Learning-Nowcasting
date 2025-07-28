@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from pathlib import Path
 import torch
 from torch.utils.data import Dataset
@@ -174,3 +175,161 @@ class ReportingDataset(Dataset):
                     matrix[i, j] = 0
         return matrix
 
+
+class SeroDataset:
+    def __init__(self, dataset, T):
+        self.dataset = dataset
+        self.T = T
+    
+    def get_obs(self, date):
+        # Get all samples submitted before date
+        date = pd.to_datetime(date).to_period('M')
+        obs = self.dataset.loc[self.dataset['Submission date'] < date].copy()
+
+        # Compute difference in months between collection day and date
+        obs['Date diff'] = (date - obs['Collection date']).apply(lambda x: x.n)
+        obs = obs[["Sero", "Delay", "Date diff"]]
+
+        # Keep only last T samples
+        obs = obs.sort_values("Date diff")
+        obs = obs.iloc[0:self.T, :]
+
+        # Encode Sero type i.e DENV1 -> 1
+        obs['Sero'], _ = pd.factorize(obs['Sero'])
+        obs['Sero'] += 1    
+        return np.array(obs)
+    
+class PartialCountDataset:
+
+    def __init__(self, dataset, D, M, norm=True):
+        self.dataset = dataset
+        self.M = M
+        self.D = D
+        self.norm = norm
+        self.max_val = dataset.select_dtypes(include='number').max().max()
+    
+    def get_obs(self, date):
+        # Get all obs up to and including current day
+        date = pd.to_datetime(date)
+        obs = self.dataset.loc[self.dataset['Collection date'] <= date].copy()
+        obs.drop(columns=['Collection date'], inplace=True)
+
+        # Limit to past M days and max delay of D
+        obs = obs.iloc[-self.M:, :self.D]
+
+        # Create mask over last D days
+        mask = self.get_mask()
+        
+        # Create reporting triangle
+        obs.loc[obs.iloc[-self.D:].index, :] = obs.iloc[-self.D:, :].where(mask, 0)
+        
+        if self.norm:
+            return np.array(obs) / self.max_val
+        
+        return np.array(obs)
+
+    def get_mask(self):
+        mask_matrix = np.ones(shape=(self.D, self.D), dtype=bool)
+        for i in range(self.D):
+            for j in range(self.D):
+                if i + j > self.D - 1:
+                    mask_matrix[i, j] = False
+        return mask_matrix
+
+
+
+
+    def __getitem__(self, idx):
+        t = idx + self.M
+        obs = self.df[t-self.M: t]
+
+        # Create observed reporting triangle
+        mask = self.get_mask()
+        obs_masked = obs.copy() / self.max_val
+        if self.M <= self.D:
+            mask = mask[-self.M:,:]
+            obs_masked[-self.M:, :][~mask] = 0
+        else:
+            obs_masked[-self.D:, :][~mask] = 0
+
+        obs_masked = torch.tensor(obs_masked, dtype=torch.float32)
+        obs_masked = obs_masked.to(self.device)
+
+        # Get day of the week and week num
+        date = self.get_date(idx)
+        dow = torch.tensor(date.weekday(), dtype=torch.int32)
+        dow.to(self.device)
+        # week = torch.tensor(date.isocalendar().week - 1, dtype=torch.int32)
+        # week.to(self.device)
+
+        type_name_obs = self.type_name_obj.get_type_name_triangle(date)
+        type_name_prop = self.type_name_obj.get_type_name_prop(date)
+
+        # Create y label
+        y_label = torch.tensor(obs[self.M - 1, :].sum(), dtype=torch.float32)
+        y_label = (y_label * type_name_prop)
+        y_label = np.round(y_label)
+        y_label.to(self.device)
+        return (obs_masked, dow, type_name_obs), (y_label, type_name_prop)
+        
+    
+    def get_mask(self):
+        mask_matrix = np.ones(shape=(self.D, self.D), dtype=bool)
+        for i in range(self.D):
+            for j in range(self.D):
+                if i + j > self.D - 1:
+                    mask_matrix[i, j] = False
+        return mask_matrix
+
+    def get_date(self, idx):
+        return self.dates[idx].date()
+    
+    def get_y(self, idx):
+        t = idx + self.M
+        y = np.array(self.df[t-1].sum())
+    
+        date = self.get_date(idx)
+        type_name_prop = self.type_name_obj.get_type_name_prop(date)
+        y = (y * type_name_prop)
+        return y
+
+
+class TrueCountDataset:
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def get_y(self, date):
+        date = pd.to_datetime(date)
+        y = self.dataset.loc[self.dataset['Collection date'] == date].copy()
+        y.drop(columns=['Collection date'], inplace=True)
+        return np.array(y.sum(1))
+
+    def get_z(self, date):
+        date = pd.to_datetime(date)
+        z = self.dataset.loc[self.dataset['Collection date'] == date].copy()
+        z.drop(columns=['Collection date'], inplace=True)
+        return np.array(z)
+    
+    def get_y_prop(self, date, prop_vec):
+        date = pd.to_datetime(date)
+        y = self.get_y(date)
+        return y * prop_vec
+
+
+
+if __name__ == "__main__":
+    # # Check SeroDataset working as expected
+    # denv_df = pd.read_csv(Path("data") / "transformed" / "denv_df.csv")
+    # denv_df['Collection date'] = pd.to_datetime(denv_df['Collection date']).dt.to_period('M')
+    # denv_df['Submission date'] = pd.to_datetime(denv_df['Submission date']).dt.to_period('M')
+    # sero_dataset = SeroDataset(dataset=denv_df, T=10)
+    # obs = sero_dataset.get_obs("2016-07-01")
+
+    # Check PatialCountDataset working as expected
+    delays_df = pd.read_csv(Path("data") / "transformed" / "DENG_delays.csv")
+    delays_df['Collection date'] = pd.to_datetime(delays_df['Collection date'])
+    # deng_dataset = PartialCountDataset(delays_df, D=40, M=50)
+    # print(deng_dataset.get_obs("2016-07-01"))
+    
+    true_count_dataset = TrueCountDataset(delays_df)
+    print(true_count_dataset.get_y_prop("2016-01-01", [0.3, 0.3, 0.3, 0.1]))
