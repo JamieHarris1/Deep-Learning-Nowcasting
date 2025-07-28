@@ -177,8 +177,9 @@ class ReportingDataset(Dataset):
 
 
 class SeroDataset:
-    def __init__(self, dataset, T):
+    def __init__(self, dataset, prop_dataset, T):
         self.dataset = dataset
+        self.prop_dataset = prop_dataset
         self.T = T
     
     def get_obs(self, date):
@@ -199,6 +200,13 @@ class SeroDataset:
         obs['Sero'] += 1    
         return np.array(obs)
     
+    def get_prop_vec(self, date):
+        date = pd.to_datetime(date).to_period('M')
+        obs = self.prop_dataset.loc[self.prop_dataset['Collection date'] == date].copy()
+        obs.drop(columns=['Collection date'], inplace=True)
+        return obs.to_numpy().ravel()
+
+
 class PartialCountDataset:
 
     def __init__(self, dataset, D, M, norm=True):
@@ -236,64 +244,6 @@ class PartialCountDataset:
                     mask_matrix[i, j] = False
         return mask_matrix
 
-
-
-
-    def __getitem__(self, idx):
-        t = idx + self.M
-        obs = self.df[t-self.M: t]
-
-        # Create observed reporting triangle
-        mask = self.get_mask()
-        obs_masked = obs.copy() / self.max_val
-        if self.M <= self.D:
-            mask = mask[-self.M:,:]
-            obs_masked[-self.M:, :][~mask] = 0
-        else:
-            obs_masked[-self.D:, :][~mask] = 0
-
-        obs_masked = torch.tensor(obs_masked, dtype=torch.float32)
-        obs_masked = obs_masked.to(self.device)
-
-        # Get day of the week and week num
-        date = self.get_date(idx)
-        dow = torch.tensor(date.weekday(), dtype=torch.int32)
-        dow.to(self.device)
-        # week = torch.tensor(date.isocalendar().week - 1, dtype=torch.int32)
-        # week.to(self.device)
-
-        type_name_obs = self.type_name_obj.get_type_name_triangle(date)
-        type_name_prop = self.type_name_obj.get_type_name_prop(date)
-
-        # Create y label
-        y_label = torch.tensor(obs[self.M - 1, :].sum(), dtype=torch.float32)
-        y_label = (y_label * type_name_prop)
-        y_label = np.round(y_label)
-        y_label.to(self.device)
-        return (obs_masked, dow, type_name_obs), (y_label, type_name_prop)
-        
-    
-    def get_mask(self):
-        mask_matrix = np.ones(shape=(self.D, self.D), dtype=bool)
-        for i in range(self.D):
-            for j in range(self.D):
-                if i + j > self.D - 1:
-                    mask_matrix[i, j] = False
-        return mask_matrix
-
-    def get_date(self, idx):
-        return self.dates[idx].date()
-    
-    def get_y(self, idx):
-        t = idx + self.M
-        y = np.array(self.df[t-1].sum())
-    
-        date = self.get_date(idx)
-        type_name_prop = self.type_name_obj.get_type_name_prop(date)
-        y = (y * type_name_prop)
-        return y
-
-
 class TrueCountDataset:
     def __init__(self, dataset):
         self.dataset = dataset
@@ -308,7 +258,7 @@ class TrueCountDataset:
         date = pd.to_datetime(date)
         z = self.dataset.loc[self.dataset['Collection date'] == date].copy()
         z.drop(columns=['Collection date'], inplace=True)
-        return np.array(z)
+        return z.to_numpy().ravel()
     
     def get_y_prop(self, date, prop_vec):
         date = pd.to_datetime(date)
@@ -320,16 +270,26 @@ class TrueCountDataset:
 if __name__ == "__main__":
     # # Check SeroDataset working as expected
     # denv_df = pd.read_csv(Path("data") / "transformed" / "denv_df.csv")
+    # sero_props = pd.read_csv(Path("data") / "transformed" / "sero_props.csv")
+
     # denv_df['Collection date'] = pd.to_datetime(denv_df['Collection date']).dt.to_period('M')
     # denv_df['Submission date'] = pd.to_datetime(denv_df['Submission date']).dt.to_period('M')
-    # sero_dataset = SeroDataset(dataset=denv_df, T=10)
-    # obs = sero_dataset.get_obs("2016-07-01")
+
+
+
+    # sero_props['Collection date'] = pd.to_datetime(sero_props['Collection date']).dt.to_period('M')
+
+
+
+    # sero_dataset = SeroDataset(dataset=denv_df, prop_dataset=sero_props, T=10)
+    # obs = sero_dataset.get_prop_vec("2016-07-01")
+    # print(obs)
 
     # Check PatialCountDataset working as expected
     delays_df = pd.read_csv(Path("data") / "transformed" / "DENG_delays.csv")
     delays_df['Collection date'] = pd.to_datetime(delays_df['Collection date'])
-    # deng_dataset = PartialCountDataset(delays_df, D=40, M=50)
-    # print(deng_dataset.get_obs("2016-07-01"))
+    deng_dataset = PartialCountDataset(delays_df, D=40, M=50)
+    print(deng_dataset.get_obs("2016-07-01"))
     
-    true_count_dataset = TrueCountDataset(delays_df)
-    print(true_count_dataset.get_y_prop("2016-01-01", [0.3, 0.3, 0.3, 0.1]))
+    # true_count_dataset = TrueCountDataset(delays_df)
+    # print(true_count_dataset.get_y_prop("2016-01-01", [0.3, 0.3, 0.3, 0.1]))

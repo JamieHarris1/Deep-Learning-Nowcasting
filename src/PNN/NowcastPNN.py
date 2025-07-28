@@ -458,6 +458,8 @@ class PropNet(nn.Module):
         temp_low = 0.4
         temp_high = 1.3
 
+        print(x_prop.shape)
+        print(lbda.shape)
         x_temp = self.act(self.fc_temp1(torch.log(lbda + 1e-6)))
 
         # Learn a value in [0, 1]
