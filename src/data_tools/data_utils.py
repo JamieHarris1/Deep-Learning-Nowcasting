@@ -190,6 +190,8 @@ class SeroDataset:
         # Compute difference in months between collection day and date
         obs['Date diff'] = (date - obs['Collection date']).apply(lambda x: x.n)
         obs = obs[["Sero", "Delay", "Date diff"]]
+        obs = obs.groupby(["Sero", "Delay", "Date diff"]).size().reset_index(name="Count")
+
 
         # Keep only last T samples
         obs = obs.sort_values("Date diff")
@@ -198,6 +200,10 @@ class SeroDataset:
         # Encode Sero type i.e DENV1 -> 1
         obs['Sero'], _ = pd.factorize(obs['Sero'])
         obs['Sero'] += 1    
+
+        obs['Delay'] = np.log1p(obs['Delay'])
+        obs['Date diff'] = np.log1p(obs['Date diff'])
+
         return np.array(obs)
     
     def get_prop_vec(self, date):
@@ -263,7 +269,7 @@ class TrueCountDataset:
     def get_y_prop(self, date, prop_vec):
         date = pd.to_datetime(date)
         y = self.get_y(date)
-        return y * prop_vec
+        return (y * prop_vec).round()
 
 
 

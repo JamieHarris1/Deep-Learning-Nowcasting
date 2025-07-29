@@ -49,6 +49,24 @@ def eval_sparse_prop_pnn(dataset, model, n_samples=50):
             preds[:, i] = samples.sum(-1)
         return preds, z
     
+def eval_sero_pnn(dataset, model, N, n_samples=50):
+    eval_loader = DataLoader(dataset, batch_size=dataset.__len__(), shuffle=False)
+
+    # Ensures dropout is active
+    model.train()  
+    with torch.no_grad():
+        (obs, dow, sero_obs), y = next(iter(eval_loader))
+
+        preds = np.zeros(shape=(dataset.__len__(), N,  n_samples))
+        for i in range(n_samples):
+            dist_pred, active_idxs = model(obs, dow, sero_obs)
+            samples = np.zeros_like(active_idxs, dtype=np.float32)
+            samples[active_idxs] = dist_pred.sample().numpy()
+            preds[:, :, i] = samples
+        return preds, y
+    
+
+    
 def plot_pnn_preds(preds, dataset, title):
     preds_median = np.quantile(preds, 0.5, axis=1)
     y_true = [dataset.__getitem__(i)[1].item() for i in range(len(dataset))]
@@ -82,6 +100,24 @@ def plot_prop_pnn_preds(preds, dataset, title):
     plt.title(title, fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+
+def plot_sero_pnn_preds(preds, dataset, N, title):
+    preds_median = np.quantile(preds, 0.5, axis=-1)
+    dates = dataset.dates
+    colors = plt.cm.tab10(np.linspace(0, 1, N))
+
+    for s in range(N):
+        y_true = [dataset.__getitem__(i)[1][s].item() for i in range(len(dataset))]
+
+        plt.plot(dates, preds_median[:,s], label='PropPNN Preds', color=colors[s])
+        plt.plot(dates, y_true, label=f'True y', color="black")
+        
+        plt.legend()
+        plt.tick_params(axis='x', rotation=45)
+        plt.tight_layout()
+        plt.title(f"{title}: DENV-{s+1}", fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.show()
 
 
     
