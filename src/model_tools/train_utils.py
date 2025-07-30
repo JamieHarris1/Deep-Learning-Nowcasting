@@ -140,7 +140,7 @@ class SeroTrain(BaseTrain):
         for (obs, dow, sero_obs), y in train_loader:
             optimizer.zero_grad()
             dist_pred, active_sero = model(obs, dow, sero_obs)
-            loss = self.nll(y[active_sero], dist_pred).mean()
+            loss = self.nll(y[active_sero], dist_pred)
             loss.retain_grad()
             loss.backward()
 
@@ -165,7 +165,7 @@ class SeroTrain(BaseTrain):
             val_batch_loss = 0.
             for (obs, dow, sero_obs), y in val_loader:
                 dist_pred, active_idxs = model(obs, dow, sero_obs)
-                val_loss = self.nll(y[active_idxs], dist_pred).mean()
+                val_loss = self.nll(y[active_idxs], dist_pred)
                 val_batch_loss += val_loss.item()
 
             if self.early_stop(val_batch_loss, model):

@@ -177,20 +177,22 @@ class ReportingDataset(Dataset):
 
 
 class SeroDataset:
-    def __init__(self, dataset, prop_dataset, T):
+    def __init__(self, dataset, prop_dataset, T, period="Q"):
         self.dataset = dataset
         self.prop_dataset = prop_dataset
         self.T = T
+        self.period = period
     
     def get_obs(self, date):
         # Get all samples submitted before date
-        date = pd.to_datetime(date).to_period('M')
+        date = pd.to_datetime(date).to_period(self.period)
         obs = self.dataset.loc[self.dataset['Submission date'] < date].copy()
 
         # Compute difference in months between collection day and date
         obs['Date diff'] = (date - obs['Collection date']).apply(lambda x: x.n)
-        obs = obs[["Sero", "Delay", "Date diff"]]
-        obs = obs.groupby(["Sero", "Delay", "Date diff"]).size().reset_index(name="Count")
+        obs = obs[["Sero", "Quarter", "Delay", "Date diff"]]
+        
+        obs = obs.groupby(["Sero", "Quarter", "Delay", "Date diff"]).size().reset_index(name="Count")
 
 
         # Keep only last T samples
@@ -207,7 +209,7 @@ class SeroDataset:
         return np.array(obs)
     
     def get_prop_vec(self, date):
-        date = pd.to_datetime(date).to_period('M')
+        date = pd.to_datetime(date).to_period(self.period)
         obs = self.prop_dataset.loc[self.prop_dataset['Collection date'] == date].copy()
         obs.drop(columns=['Collection date'], inplace=True)
         return obs.to_numpy().ravel()

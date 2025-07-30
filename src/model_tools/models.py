@@ -315,8 +315,10 @@ class SeroPNN(nn.Module):
         self.N = N
         self.device = device
         self.const = 10000
-        self.n_features = 3
+        self.n_features = 5
         self.sero_embedding_dim = N
+        self.quarter_embedding_dim = 2
+        self.total_features = self.sero_embedding_dim + self.quarter_embedding_dim + self.n_features - 2
 
         self.softplus = nn.Softplus()
         self.act = nn.SiLU()
@@ -358,17 +360,15 @@ class SeroPNN(nn.Module):
 
         ## Sero model ##
         self.fc_phi_head = nn.Linear(1, self.N)
-        self.layer_norm1 = nn.LayerNorm(self.n_features + self.sero_embedding_dim)
-        self.layer_norm2 = nn.LayerNorm(self.n_features + self.sero_embedding_dim)
+        self.layer_norm1 = nn.LayerNorm(self.total_features)
+        self.layer_norm2 = nn.LayerNorm(self.total_features)
 
         self.sero_embedding = nn.Embedding(num_embeddings=self.N, embedding_dim=self.sero_embedding_dim)
-        
+        self.quarter_embedding = nn.Embedding(num_embeddings=4, embedding_dim=self.quarter_embedding_dim)
 
-        self.attn_sero1 = nn.MultiheadAttention(embed_dim=self.n_features + self.sero_embedding_dim, num_heads=self.n_features + self.sero_embedding_dim, batch_first=True)
+        self.attn_sero1 = nn.MultiheadAttention(embed_dim=self.total_features, num_heads=1, batch_first=True)
         self.fc_sero_attn1 = nn.Linear(self.T, self.T)
 
-        self.attn_sero2 = nn.MultiheadAttention(embed_dim=self.n_features + self.sero_embedding_dim, num_heads=1, batch_first=True)
-        self.fc_sero_attn2 = nn.Linear(self.T, self.T)
 
         self.conv_sero1 = nn.Conv1d(self.T, 16, kernel_size=7, padding="same")
         self.conv_sero2 = nn.Conv1d(16, 8, kernel_size=7, padding="same")
@@ -379,11 +379,14 @@ class SeroPNN(nn.Module):
         self.bnorm_sero2 = nn.BatchNorm1d(num_features=16)
         self.bnorm_sero3 = nn.BatchNorm1d(num_features=8)
 
-        self.fc_sero1 = nn.Linear(self.T*(self.n_features + self.sero_embedding_dim), 16)
+        self.fc_sero1 = nn.Linear(self.T*(self.total_features), 16)
         self.fc_sero2 = nn.Linear(16, 8)
         self.fc_sero3 = nn.Linear(8, N)
 
-        self.drop_sero1 = nn.Dropout(0.1)
+        self.drop_sero1 = nn.Dropout(0.2)
+        self.drop_sero2 = nn.Dropout(0.2)
+        self.drop_sero3 = nn.Dropout(0.2)
+        self.drop_sero4 = nn.Dropout(0.1)
 
 
     def forward(self, obs, dow,  sero_obs): 
@@ -433,20 +436,24 @@ class SeroPNN(nn.Module):
         ## Predict delay proportions 
         x_sero = sero_obs.clone()
         
-        # Create Sero embedding
+        # Create embedding for sero and quarter
         sero_idx = x_sero[:, :, 0].to(torch.int64) - 1 #(since torch expects embedding from 0 but more intuitive to have 1-4)
-        sero_features = x_sero[:, :, 1:]
+        quarter_idx = x_sero[:, :, 1].to(torch.int64) - 1
+        sero_features = x_sero[:, :, 2:]
         
         sero_embedded = self.sero_embedding(sero_idx)
-        x_sero = torch.cat([sero_embedded, sero_features], dim=-1).float()
-
+        quarter_embedded = self.quarter_embedding(quarter_idx)
+        x_sero = torch.cat([sero_embedded, quarter_embedded, sero_features], dim=-1).float()
+        
         # Norm layer
         x_sero = self.layer_norm1(x_sero)
 
         # Conv over Time dim
         x_res = x_sero.clone()
         x_sero = self.act(self.conv_sero1(self.bnorm_sero1(x_sero)))
+        x_sero = self.drop_sero1(x_sero)
         x_sero = self.act(self.conv_sero2(self.bnorm_sero2(x_sero)))
+        x_sero = self.drop_sero2(x_sero)
         x_sero = self.act(self.conv_sero3(self.bnorm_sero3(x_sero)))
         x_sero = x_sero + x_res
 
@@ -454,10 +461,10 @@ class SeroPNN(nn.Module):
 
         # Fully connected head
         x_sero = self.act(self.fc_sero1(x_sero))
-        x_sero = self.drop_sero1(x_sero)
+        x_sero = self.drop_sero3(x_sero)
 
         x_sero = self.act(self.fc_sero2(x_sero))
-        x_sero = self.drop_sero1(x_sero)
+        x_sero = self.drop_sero4(x_sero)
 
         x_sero = self.fc_sero3(x_sero)
 
