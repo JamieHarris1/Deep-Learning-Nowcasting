@@ -109,7 +109,7 @@ def plot_sero_pnn_preds(preds, dataset, N, title):
     for s in range(N):
         y_true = [dataset.__getitem__(i)[1][s].item() for i in range(len(dataset))]
 
-        plt.plot(dates, preds_median[:,s], label='PropPNN Preds', color=colors[s])
+        plt.plot(dates, preds_median[:,s], label='SeroPNN Preds', color=colors[s])
         plt.plot(dates, y_true, label=f'True y', color="black")
         
         plt.legend()
