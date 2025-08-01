@@ -190,9 +190,9 @@ class SeroDataset:
 
         # Compute difference in months between collection day and date
         obs['Date diff'] = (date - obs['Collection date']).apply(lambda x: x.n)
-        obs = obs[["Sero", "Quarter", "Delay", "Date diff"]]
+        obs = obs[["Sero", "Month", "Delay", "Date diff"]]
         
-        obs = obs.groupby(["Sero", "Quarter", "Delay", "Date diff"]).size().reset_index(name="Count")
+        obs = obs.groupby(["Sero", "Month", "Delay", "Date diff"]).size().reset_index(name="Count")
 
 
         # Keep only last T samples
@@ -272,6 +272,43 @@ class TrueCountDataset:
         date = pd.to_datetime(date)
         y = self.get_y(date)
         return (y * prop_vec).round()
+    
+class SimulateSero:
+    def __init__(self, tensor, dates, T, Q, N, prop_vec):
+        self.tensor = tensor
+        self.dates = pd.to_datetime(dates)
+        self.T = T
+        self.Q = Q
+        self.N = N
+        self.prop_vec = prop_vec
+        self.max_val = tensor.max()
+        self.mask = self.get_mask(T, Q)[np.newaxis, :, :]
+
+    def get_mask(self, T, Q):
+        mask = np.ones((T, Q), dtype=bool)
+        # Apply triangle mask to the bottom Q rows
+        for i in range(Q):
+            for j in range(Q):
+                if i + j > Q - 1:
+                    mask[T - Q + i, j] = False
+
+        return mask
+
+
+    def get_obs(self, date):
+        date = pd.to_datetime(date)
+        idxs = self.dates < date
+        obs = self.tensor[:, idxs, :]
+        obs = obs[:, -self.T:, :]
+        obs = np.where(self.mask, obs, 0)
+
+        return obs / self.max_val
+    
+    def get_prop_vec(self, date):
+        return self.prop_vec
+        
+
+
 
 
 
@@ -294,10 +331,29 @@ if __name__ == "__main__":
     # print(obs)
 
     # Check PatialCountDataset working as expected
-    delays_df = pd.read_csv(Path("data") / "transformed" / "DENG_delays.csv")
-    delays_df['Collection date'] = pd.to_datetime(delays_df['Collection date'])
-    deng_dataset = PartialCountDataset(delays_df, D=40, M=50)
-    print(deng_dataset.get_obs("2016-07-01"))
+    # delays_df = pd.read_csv(Path("data") / "transformed" / "DENG_delays.csv")
+    # delays_df['Collection date'] = pd.to_datetime(delays_df['Collection date'])
+    # deng_dataset = PartialCountDataset(delays_df, D=40, M=50)
+    # print(deng_dataset.get_obs("2016-07-01"))
     
     # true_count_dataset = TrueCountDataset(delays_df)
     # print(true_count_dataset.get_y_prop("2016-01-01", [0.3, 0.3, 0.3, 0.1]))
+
+    # Check SimSero
+    sero_tensor = []
+    base_folder = Path("data") / "model" / "sero_dfs"
+    files = [f for f in os.listdir(base_folder) if f.endswith('.csv')]
+    for file in files:
+        file_path = os.path.join(base_folder, file)
+        df = pd.read_csv(file_path)
+        dates = df['Collection date']
+        sero_df = df.drop(columns="Collection date")
+        sero_tensor.append(sero_df)
+    sero_tensor = np.array(sero_tensor)
+
+    sim_sero = SimulateSero(sero_tensor, dates, T=72, Q=60, N=4)
+    obs = sim_sero.get_obs("2018-01-01")
+    # vec = sim_sero.get_prop_vec("2014-01-01")
+
+    print(obs)
+    

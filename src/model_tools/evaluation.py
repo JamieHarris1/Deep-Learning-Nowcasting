@@ -59,7 +59,7 @@ def eval_sero_pnn(dataset, model, N, n_samples=50):
 
         preds = np.zeros(shape=(dataset.__len__(), N,  n_samples))
         for i in range(n_samples):
-            dist_pred, active_idxs = model(obs, dow, sero_obs)
+            dist_pred, active_idxs, p_active = model(obs, dow, sero_obs)
             samples = np.zeros_like(active_idxs, dtype=np.float32)
             samples[active_idxs] = dist_pred.sample().numpy()
             preds[:, :, i] = samples
@@ -121,4 +121,17 @@ def plot_sero_pnn_preds(preds, dataset, N, title):
 
 
     
-    
+def eval_direct_sero(dataset, model, N, n_samples=50):
+    eval_loader = DataLoader(dataset, batch_size=dataset.__len__(), shuffle=False)
+
+    # Ensures dropout is active
+    model.train()  
+    with torch.no_grad():
+        (obs, dow, sero_obs), y = next(iter(eval_loader))
+
+        preds = np.zeros(shape=(dataset.__len__(), N, n_samples))
+        for i in range(n_samples):
+            dist_pred = model(obs, dow, sero_obs)
+            samples = dist_pred.sample().numpy()
+            preds[:, :, i] = samples
+        return preds, y
