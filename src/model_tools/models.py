@@ -765,7 +765,6 @@ class DirectSero(nn.Module):
 
 
 
-
         dist = NB(lbda=lbda, phi=phi)
 
         return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1)

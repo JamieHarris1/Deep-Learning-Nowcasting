@@ -274,13 +274,14 @@ class TrueCountDataset:
         return (y * prop_vec).round()
     
 class SimulateSero:
-    def __init__(self, tensor, dates, T, Q, N, prop_vec):
+    def __init__(self, tensor, dates, T, Q, N, prop_vec=None, prop_tensor=None):
         self.tensor = tensor
         self.dates = pd.to_datetime(dates)
         self.T = T
         self.Q = Q
         self.N = N
         self.prop_vec = prop_vec
+        self.prop_tensor = prop_tensor
         self.max_val = tensor.max()
         self.mask = self.get_mask(T, Q)[np.newaxis, :, :]
 
@@ -305,7 +306,19 @@ class SimulateSero:
         return obs / self.max_val
     
     def get_prop_vec(self, date):
-        return self.prop_vec
+        if self.prop_vec is not None:
+            return self.prop_vec
+        
+        if self.prop_tensor is not None:
+            date = pd.to_datetime(date).to_period("M")
+            idxs = self.dates.dt.to_period("M") == date
+            if sum(idxs) == 0:
+                print(self.dates, date)
+                return None
+            prop_vec = self.prop_tensor[:, idxs, :]
+            return prop_vec.ravel().reshape(self.N, 1)
+
+            
         
 
 

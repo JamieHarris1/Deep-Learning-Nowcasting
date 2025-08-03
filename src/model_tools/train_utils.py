@@ -27,6 +27,8 @@ class BaseTrain:
         return False
     
     def nll(self, y_true, y_pred):
+        if len(y_true.shape):
+            y_true = y_true.squeeze(-1)
         nll_loss = -y_pred.log_prob(y_true)
         return nll_loss
     
