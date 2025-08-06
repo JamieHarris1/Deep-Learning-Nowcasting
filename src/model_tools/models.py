@@ -669,15 +669,16 @@ class DirectSero(nn.Module):
         self.sparsemax = Sparsemax(dim=1)
 
         # Proportion
-        self.conv_prop1 = nn.Conv2d(in_channels=self.N, out_channels=16, kernel_size=3, stride=1, padding=1)
-        self.conv_prop2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3, stride=1, padding=1)
-        self.conv_prop3 = nn.Conv2d(in_channels=8, out_channels=self.N, kernel_size=3, stride=1, padding=1)
-        
-        self.bnorm3= nn.BatchNorm2d(num_features=self.N)
-        self.bnorm4 = nn.BatchNorm2d(num_features=16)
-        self.bnorm5 = nn.BatchNorm2d(num_features=8)
+        self.conv_prop1 = nn.Conv2d(in_channels=self.N, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.conv_prop2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.conv_prop3 = nn.Conv2d(in_channels=64, out_channels=self.N, kernel_size=3, stride=1, padding=1)
+        self.avg_pool = nn.AdaptiveAvgPool2d((T, 1))
 
-        self.fc_prop1 = nn.Linear(self.Q*self.T, self.M)
+        self.bnorm3= nn.BatchNorm2d(num_features=self.N)
+        self.bnorm4 = nn.BatchNorm2d(num_features=64)
+        self.bnorm5 = nn.BatchNorm2d(num_features=64)
+
+        self.fc_prop1 = nn.Linear(self.T, self.M)
         self.fc_prop2 = nn.Linear(hidden_units[0], hidden_units[1])
         self.fc_prop3 = nn.Linear(hidden_units[1], hidden_units[1])
         self.fc_prop4 = nn.Linear(hidden_units[1], 2)
@@ -722,9 +723,24 @@ class DirectSero(nn.Module):
         
 
         ## Serotype Model ##
-        x_prop = sero_obs.float().clone()
+        x_prop = sero_obs.float().clone() # (B,N,T,Q)
+
+        # Capture temporal trends
+        x_prop = x_prop.permute(2, 0, 1, 3)  # (T, B, N, Q)
+        x_prop = x_prop.reshape(self.T, B * self.N * self.Q, 1)  # (T, B*C*H, d_model=1)
+
+        # Attention layer (embed_dim=1 since each time point has 1 feature)
+        time_attn = nn.MultiheadAttention(embed_dim=1, num_heads=1, batch_first=False)
+
+        # Self-attention over time
+        x_prop = time_attn(x_prop, x_prop, x_prop)[0]  # (T, B*C*H, 1)
+
+        # Reshape back
+        x_prop = x_prop.reshape(self.T, B, self.N, self.Q)
+
         # Make time last dim
-        x_prop = x_prop.permute(0, 1, 3, 2)
+        x_prop = x_prop.permute(1, 2, 3, 0)
+
 
         # Conv2d with serotypes as channel dim
         x_res = x_prop.clone()
@@ -733,16 +749,17 @@ class DirectSero(nn.Module):
         x_prop = self.conv_prop2(self.bnorm4(x_prop))
         x_prop = self.drop1(x_prop)
         x_prop = self.conv_prop3(self.bnorm5(x_prop))
-        x_prop = x_prop + x_res
+        x_prop = self.avg_pool(x_prop)
 
         # Dense layers to get x_prop to size self.M
-        x_prop = x_prop.reshape(B, self.N, self.Q*self.T)
+        x_prop = x_prop.reshape(B, self.N, self.T)
         x_prop = self.act(self.fc_prop1(x_prop))
 
         # Normlaise both heads
         x_total = self.layer_norm_total(x_total)
         x_prop = self.layer_norm_prop(x_prop)
 
+        
         # Combime Total count and Serotype information
         x_total = x_total.unsqueeze(1).expand(-1, self.N, -1)
         x_combo = torch.cat([x_total, x_prop], dim=-1)
