@@ -69,11 +69,16 @@ def eval_sero_pnn(dataset, model, N, n_samples=50):
     
 def plot_pnn_preds(preds, dataset, title):
     preds_median = np.quantile(preds, 0.5, axis=1)
+    preds_lower = np.quantile(preds, 0.025, axis=1)
+    preds_upper = np.quantile(preds, 0.975, axis=1)
+
     y_true = [dataset.__getitem__(i)[1].item() for i in range(len(dataset))]
     dates = dataset.dates
 
-    plt.plot(dates, preds_median, label=f'PNN Preds')
+    plt.plot(dates, preds_median, label=f'NowcastPNN Preds', color="red")
     plt.plot(dates, y_true, label=f'True y', color="black")
+    plt.fill_between(dates, preds_lower, preds_upper, color='red', alpha=0.2, label='NowcastPNN 95% CI')
+
     
     plt.legend()
     plt.tick_params(axis='x', rotation=45)
@@ -83,16 +88,22 @@ def plot_pnn_preds(preds, dataset, title):
     plt.show()
 
 def plot_prop_pnn_preds(preds, dataset, title):
-    preds_median = np.quantile(preds, 0.5, axis=1)
+    
     y_true = []
     for i in range(len(dataset)):
         _, z = dataset.__getitem__(i)
         y_true.append(z.sum())
 
+    preds_median = np.quantile(preds, 0.5, axis=1)
+    preds_lower = np.quantile(preds, 0.025, axis=1)
+    preds_upper = np.quantile(preds, 0.975, axis=1)
+
     dates = dataset.dates
 
-    plt.plot(dates, preds_median, label='PropPNN Preds')
+    plt.plot(dates, preds_median, label='PropPNN Preds', color="blue")
     plt.plot(dates, y_true, label=f'True y', color="black")
+    plt.fill_between(dates, preds_lower, preds_upper, color='blue', alpha=0.2, label='PropPNN 95% CI')
+
     
     plt.legend()
     plt.tick_params(axis='x', rotation=45)

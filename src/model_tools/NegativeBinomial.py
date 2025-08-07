@@ -23,10 +23,10 @@ class NegBin(ExponentialFamily):
     @property
     def mode(self):
         return torch.floor((self.phi-1)*self.lbda/self.phi)
-    
+    @property
     def get_lbda(self):
         return self.lbda
-    
+    @property
     def get_phi(self):
         return self.phi
 
