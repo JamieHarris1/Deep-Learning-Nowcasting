@@ -16,6 +16,8 @@ venv/
 *.csv
 *.tsv
 *.dbc
+*.npz
+*.xlsx
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
