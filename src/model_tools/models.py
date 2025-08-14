@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch
-from model_tools.NegativeBinomial import NegBin as NB
+from .NegativeBinomial import NegBin as NB
 from sparsemax import Sparsemax
 
 
@@ -503,9 +503,9 @@ class SimSero(nn.Module):
         self.N = N
         self.final_dim = M
         self.temperature_raw = nn.Parameter(torch.tensor(1.0))
-        init_val = 10000.0
-        self.lbda_scale = nn.Parameter(torch.tensor(10000, dtype=torch.float32))
-        self.phi_scale = nn.Parameter(torch.tensor(10000**2, dtype=torch.float32))
+        init_val = 10.0
+        self.log_lbda_scale = nn.Parameter(torch.tensor(init_val, dtype=torch.float32))
+        self.log_phi_scale = nn.Parameter(torch.tensor(init_val, dtype=torch.float32))
         
 
         self.conv1 = nn.Conv1d(self.D, conv_channels[0], kernel_size=7, padding="same")
@@ -581,11 +581,11 @@ class SimSero(nn.Module):
         x = self.fcnb(self.bnorm_final(x))
 
         # Predict NB params
-        lbda = self.lbda_scale * self.softplus(x[:, 0])
+        lbda = torch.exp(self.log_lbda_scale) * self.softplus(x[:, 0])
         lbda = lbda.unsqueeze(-1)
 
         phi_raw = self.fc_phi_head(self.act(x[:, 1].unsqueeze(1)))
-        phi = self.phi_scale * self.softplus(phi_raw) + 1e-5
+        phi = torch.exp(self.log_phi_scale) * self.softplus(phi_raw) + 1e-5
 
         ## Proportion Model##
         x_prop = sero_obs.float().clone()
@@ -629,7 +629,6 @@ class SimSero(nn.Module):
         dist = NB(lbda=mu_active, phi=phi_active)
 
         return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1), active_sero, p_active
-
 
 class DirectSero(nn.Module):
     def __init__(self, M , D, T, Q, N, hidden_units = [16, 8], conv_channels = [16, 1], embedding_dim = 10, dropout_probs = [0.15, 0.1], device="cpu"):
@@ -785,4 +784,3 @@ class DirectSero(nn.Module):
         dist = NB(lbda=lbda, phi=phi)
 
         return torch.distributions.Independent(dist, reinterpreted_batch_ndims=1)
-

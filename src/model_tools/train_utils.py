@@ -196,6 +196,7 @@ class DirectTrain(BaseTrain):
         model.train()
         batch_loss = 0.
         for (obs, dow, sero_obs), y in train_loader:
+            y = y.squeeze(-1)
             optimizer.zero_grad()
             dist_pred = model(obs, dow, sero_obs)
             loss = self.nll(y, dist_pred).mean()
@@ -222,6 +223,7 @@ class DirectTrain(BaseTrain):
             model.eval()
             val_batch_loss = 0.
             for (obs, dow, sero_obs), y in val_loader:
+                y = y.squeeze(-1)
                 dist_pred = model(obs, dow, sero_obs)
                 val_loss = self.nll(y, dist_pred).mean()
                 val_batch_loss += val_loss.item()

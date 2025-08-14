@@ -82,9 +82,9 @@ def plot_pnn_preds(preds, dataset, title):
     
     plt.legend()
     plt.tick_params(axis='x', rotation=45)
-    plt.tight_layout()
+    plt.xlabel("Date of First Symptom")
+    plt.ylabel("Case Count")
     plt.title(title, fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
 def plot_prop_pnn_preds(preds, dataset, title):
@@ -107,9 +107,9 @@ def plot_prop_pnn_preds(preds, dataset, title):
     
     plt.legend()
     plt.tick_params(axis='x', rotation=45)
-    plt.tight_layout()
     plt.title(title, fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.xlabel("Date of First Symptom")
+    plt.ylabel("Case Count")
     plt.show()
 
 def plot_sero_pnn_preds(preds, dataset, N, title):
@@ -127,7 +127,8 @@ def plot_sero_pnn_preds(preds, dataset, N, title):
         plt.tick_params(axis='x', rotation=45)
         plt.tight_layout()
         plt.title(f"{title}: DENV-{s+1}", fontsize=16)
-        plt.tight_layout(rect=[0, 0, 1, 0.95])
+        plt.xlabel("Date of First Symptom")
+        plt.ylabel("Case Count")
         plt.show()
 
 
