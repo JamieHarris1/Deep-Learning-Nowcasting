@@ -135,7 +135,7 @@ class SparsePropTrain(BaseTrain):
 
 class SeroTrain(BaseTrain):
     def __init__(self, model_name, device="cpu", num_epochs=200, patience = 30, lr=0.0003, weight_decay=1e-3):
-        super().__init__(model_name, device="cpu", num_epochs=200, patience = 30, lr=0.0003, weight_decay=1e-3)
+        super().__init__(model_name, device, num_epochs, patience, lr, weight_decay)
         self.alpha = 1.2
 
     def batch_forward(self, train_loader, val_loader, optimizer, model):

@@ -18,6 +18,8 @@ venv/
 *.dbc
 *.npz
 *.xlsx
+*.nc
+*.npy
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/

@@ -67,7 +67,7 @@ def eval_sero_pnn(dataset, model, N, n_samples=50):
     
 
     
-def plot_pnn_preds(preds, dataset, title):
+def plot_pnn_preds(preds, dataset, title, base_save_path=None):
     preds_median = np.quantile(preds, 0.5, axis=1)
     preds_lower = np.quantile(preds, 0.025, axis=1)
     preds_upper = np.quantile(preds, 0.975, axis=1)
@@ -85,9 +85,11 @@ def plot_pnn_preds(preds, dataset, title):
     plt.xlabel("Date of First Symptom")
     plt.ylabel("Case Count")
     plt.title(title, fontsize=16)
+    if base_save_path is not None:
+            plt.savefig(f"{base_save_path}-NowcastPNN", dpi=600, bbox_inches="tight")
     plt.show()
 
-def plot_prop_pnn_preds(preds, dataset, title):
+def plot_prop_pnn_preds(preds, dataset, title, base_save_path=None):
     
     y_true = []
     for i in range(len(dataset)):
@@ -110,9 +112,11 @@ def plot_prop_pnn_preds(preds, dataset, title):
     plt.title(title, fontsize=16)
     plt.xlabel("Date of First Symptom")
     plt.ylabel("Case Count")
+    if base_save_path is not None:
+            plt.savefig(f"{base_save_path}-PropPNN", dpi=600, bbox_inches="tight")
     plt.show()
 
-def plot_sero_pnn_preds(preds, dataset, N, title):
+def plot_sero_pnn_preds(preds, dataset, N, base_save_path=None):
     preds_median = np.quantile(preds, 0.5, axis=-1)
     dates = dataset.dates
     colors = plt.cm.tab10(np.linspace(0, 1, N))
@@ -120,15 +124,19 @@ def plot_sero_pnn_preds(preds, dataset, N, title):
     for s in range(N):
         y_true = [dataset.__getitem__(i)[1][s].item() for i in range(len(dataset))]
 
-        plt.plot(dates, preds_median[:,s], label='SeroPNN Preds', color=colors[s])
         plt.plot(dates, y_true, label=f'True y', color="black")
+        plt.plot(dates, preds_median[:,s], label=f'DENV-{s+1} Pred', color=colors[s])
         
-        plt.legend()
+        
+        plt.legend(fontsize=16, title_fontsize=16)
         plt.tick_params(axis='x', rotation=45)
         plt.tight_layout()
-        plt.title(f"{title}: DENV-{s+1}", fontsize=16)
-        plt.xlabel("Date of First Symptom")
-        plt.ylabel("Case Count")
+        plt.xlabel("Date of First Symptom", fontsize=20)
+        plt.ylabel("Case Count", fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        if base_save_path is not None:
+            plt.savefig(f"{base_save_path}-DENV-{s+1}", dpi=600, bbox_inches="tight")
         plt.show()
 
 
