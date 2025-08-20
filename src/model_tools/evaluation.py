@@ -67,7 +67,7 @@ def eval_sero_pnn(dataset, model, N, n_samples=50):
     
 
     
-def plot_pnn_preds(preds, dataset, title, base_save_path=None):
+def plot_pnn_preds(preds, dataset, save_path=None):
     preds_median = np.quantile(preds, 0.5, axis=1)
     preds_lower = np.quantile(preds, 0.025, axis=1)
     preds_upper = np.quantile(preds, 0.975, axis=1)
@@ -75,21 +75,23 @@ def plot_pnn_preds(preds, dataset, title, base_save_path=None):
     y_true = [dataset.__getitem__(i)[1].item() for i in range(len(dataset))]
     dates = dataset.dates
 
-    plt.plot(dates, preds_median, label=f'NowcastPNN Preds', color="red")
+    
     plt.plot(dates, y_true, label=f'True y', color="black")
+    plt.plot(dates, preds_median, label=f'NowcastPNN Pred', color="red")
     plt.fill_between(dates, preds_lower, preds_upper, color='red', alpha=0.2, label='NowcastPNN 95% CI')
 
     
-    plt.legend()
+    plt.legend(fontsize=14)
     plt.tick_params(axis='x', rotation=45)
-    plt.xlabel("Date of First Symptom")
-    plt.ylabel("Case Count")
-    plt.title(title, fontsize=16)
-    if base_save_path is not None:
-            plt.savefig(f"{base_save_path}-NowcastPNN", dpi=600, bbox_inches="tight")
+    plt.xlabel("Date of First Symptom", fontsize=16)
+    plt.ylabel("Case Count", fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    if save_path is not None:
+            plt.savefig(save_path, dpi=600, bbox_inches="tight")
     plt.show()
 
-def plot_prop_pnn_preds(preds, dataset, title, base_save_path=None):
+def plot_prop_pnn_preds(preds, dataset, save_path=None):
     
     y_true = []
     for i in range(len(dataset)):
@@ -102,18 +104,20 @@ def plot_prop_pnn_preds(preds, dataset, title, base_save_path=None):
 
     dates = dataset.dates
 
-    plt.plot(dates, preds_median, label='PropPNN Preds', color="blue")
+    
     plt.plot(dates, y_true, label=f'True y', color="black")
+    plt.plot(dates, preds_median, label='PropPNN Preds', color="blue")
     plt.fill_between(dates, preds_lower, preds_upper, color='blue', alpha=0.2, label='PropPNN 95% CI')
 
     
-    plt.legend()
+    plt.legend(fontsize=14)
     plt.tick_params(axis='x', rotation=45)
-    plt.title(title, fontsize=16)
-    plt.xlabel("Date of First Symptom")
-    plt.ylabel("Case Count")
-    if base_save_path is not None:
-            plt.savefig(f"{base_save_path}-PropPNN", dpi=600, bbox_inches="tight")
+    plt.xlabel("Date of First Symptom", fontsize=16)
+    plt.ylabel("Case Count", fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    if save_path is not None:
+            plt.savefig(save_path, dpi=600, bbox_inches="tight")
     plt.show()
 
 def plot_sero_pnn_preds(preds, dataset, N, base_save_path=None):
