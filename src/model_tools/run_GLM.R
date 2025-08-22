@@ -213,7 +213,7 @@ glm_compiled_mcmc=compileNimble(glm_mcmc,resetFunctions=TRUE)
 
 
 gc()
-chain <- 1
+chain <- 3
 start_time <- Sys.time()
 print(start_time)
 for(idx in 0:(Time-1)){
@@ -229,16 +229,16 @@ for(idx in 0:(Time-1)){
   
   # output <- glm_model=run_glm(D,N,C,n_knots=c(18,9),censored_dengue,niter=60000,nburnin=1000,thin=5,
   #                             nchains=1,seed=seed)
-  output <- run_glm(D,N,C,n_knots=c(18,9),censored_dengue,niter=51000,nburnin=1000,thin=5,
-                              nchains=1,seed=seed)
-  y_samples <- output$replicates$y[,114]
-  percentile_99 <- quantile(y_samples, 0.95)
-  
-  # Remove the values above the 99th percentile
-  y_samples <- y_samples[y_samples < percentile_99]
+  output <- run_glm(D,N,C,n_knots=c(18,9),censored_dengue,niter=12000,nburnin=2000,thin=10,
+                              nchains=4,seed=seed)
+  z_samples <- output$replicates$z[,114,]
+  mu_samples <- output$samples$mu[,114,]
+  theta_samples <- output$samples$theta
   save_path <- paste0(save_base_path, "/chain_", chain)
-  fwrite(as.data.frame(y_samples), file = file.path(save_path, paste0("/y_pred_", idx, ".csv")), na = "NA")
-  gc()
+  fwrite(as.data.frame(z_samples), file = file.path(save_path, paste0("/z_pred_", idx, ".csv")), na = "NA")
+  fwrite(as.data.frame(mu_samples), file = file.path(save_path, paste0("/mu_", idx, ".csv")), na = "NA")
+  fwrite(as.data.frame(theta_samples), file = file.path(save_path, paste0("/theta_", idx, ".csv")), na = "NA")
+  
 }
 end_time <- Sys.time()
 print(paste0("Run for ", Time, " time points"))
