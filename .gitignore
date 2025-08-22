@@ -20,6 +20,7 @@ venv/
 *.xlsx
 *.nc
 *.npy
+*.jags
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -57,3 +58,4 @@ dist/
 
 # Jupyter Notebook metadata
 *.nbconvert.ipynb
+.Rproj.user

@@ -87,6 +87,7 @@ def plot_pnn_preds(preds, dataset, save_path=None):
     plt.ylabel("Case Count", fontsize=16)
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
+    plt.ylim([0, 25000])
     if save_path is not None:
             plt.savefig(save_path, dpi=600, bbox_inches="tight")
     plt.show()
@@ -116,6 +117,7 @@ def plot_prop_pnn_preds(preds, dataset, save_path=None):
     plt.ylabel("Case Count", fontsize=16)
     plt.xticks(fontsize=16)
     plt.yticks(fontsize=16)
+    plt.ylim([0, 25000])
     if save_path is not None:
             plt.savefig(save_path, dpi=600, bbox_inches="tight")
     plt.show()
